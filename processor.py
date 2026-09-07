@@ -25,24 +25,6 @@ class AquaDataset(Dataset):
         self.root = Path(path_data)
         with open(self.root / "_annotations.coco.json") as f:
             self.coco = json.load(f)
-
-    def img_transforms(self,img):
-        transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Resize((224, 224))
-        ])
-        return transform(img)
-        
-    def __len__(self):
-        # Returns the length of a dataset
-        return len(self.coco['images'])
-        
-    def __getitem__(self, index):
-        # Returns the image and its corresponding bounding box as a tensor
-        img_info = self.coco["images"][index]
-        image_id = self.coco['images'][index]["id"]
-        full_path = self.root / img_info["file_name"]
-        img = Image.open(full_path)
         bbox_list = []
         label_list = []
         areas = []
@@ -58,26 +40,43 @@ class AquaDataset(Dataset):
                     y_max = bbox[1] + bbox[3]
                     bbox = [x_min, y_min, x_max, y_max]
                 else:
-                    bbox = torch.tensor(bbox, dtype=torch.float32).view(-1, 4)
+                    bbox = torch.empty((0,4))
                 label = annotation["category_id"]
                 areas.append(annotation['area'])
                 is_crowds.append(annotation['iscrowd'])
                 bbox_list.append(bbox)
                 label_list.append(label)
         #Label information as tensors
-        bbox_tensor = torch.tensor(bbox_list, dtype=torch.float32)
-        label_tensor = torch.tensor(label_list, dtype=torch.int64)
-        area_tensor = torch.tensor(areas, dtype=torch.float32)
-        iscrowd_tensor = torch.tensor(is_crowds, dtype=torch.int64)
+        self.bbox_tensor = torch.tensor(bbox_list, dtype=torch.float32)
+        self.label_tensor = torch.tensor(label_list, dtype=torch.int64)
+        self.area_tensor = torch.tensor(areas, dtype=torch.float32)
+        self.iscrowd_tensor = torch.tensor(is_crowds, dtype=torch.int64)
+
+    def img_transforms(self,img):
+        transform = transforms.Compose([
+            transforms.ToTensor()
+        ])
+        return transform(img)
+        
+    def __len__(self):
+        # Returns the length of a dataset
+        return len(self.coco['images'])
+
+    def __getitem__(self, index):
+        # Returns the image and its corresponding bounding box as a tensor
+        img_info = self.coco["images"][index]
+        image_id = self.coco['images'][index]["id"]
+        full_path = self.root / img_info["file_name"]
+        img = Image.open(full_path).convert("RGB")
 
         target = {}
-        target["boxes"] = bbox_tensor
-        target["labels"] = label_tensor
+        target["boxes"] = self.bbox_tensor[index]
+        target["labels"] = self.label_tensor[index]
         target['image_id'] = torch.tensor([image_id])
-        target['area'] = area_tensor
-        target['iscrowd'] = iscrowd_tensor
+        target['area'] = self.area_tensor[index]
+        target['iscrowd'] = self.iscrowd_tensor[index]
         img = self.img_transforms(img)
         return img, target
 
-
-test_Dataset = AquaDataset("data/Aquarium Combined/train")
+def collate_fn(batch):
+    return tuple(zip(*batch))
