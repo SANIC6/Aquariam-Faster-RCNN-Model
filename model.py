@@ -5,5 +5,3 @@ import torch.optim as optim
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
 
-
-class
